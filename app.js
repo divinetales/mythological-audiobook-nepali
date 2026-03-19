@@ -4,7 +4,7 @@ const searchBtn = document.getElementById('searchBtn');
 const resultsContainer = document.getElementById('results-container');
 
 // Replace this URL with the actual RSS feed of the Nepali audiobook creator
-const rssFeedUrl = 'https://anchor.fm/s/placeholder/podcast/rss'; 
+const rssFeedUrl = 'https://audioboom.com/channels/4953619.rss'; 
 const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssFeedUrl)}`;
 
 function performSearch() {
