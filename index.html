@@ -6,6 +6,13 @@
     <title>Katha Audio - Download Nepali Mythological Audiobooks</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
+	/* New Seek Bar Styles */
+        .seek-bar {
+            width: 100%;
+            margin-top: 5px;
+            cursor: pointer;
+            accent-color: #3b82f6; /* Makes the slider track blue */
+        }
 	/* Search Results Styles */
 #results-container {
     max-width: 800px;
@@ -156,11 +163,12 @@
 		/* Custom Audio Player UI Styles */
         .custom-audio-player {
             display: flex;
+            flex-wrap: wrap; /* Allows the slider to drop to the next line */
             align-items: center;
             gap: 12px;
             background-color: #1e293b;
-            padding: 12px 20px;
-            border-radius: 50px;
+            padding: 15px 20px;
+            border-radius: 20px;
             margin-top: 20px;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
         }
