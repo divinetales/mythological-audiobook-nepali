@@ -17,10 +17,14 @@ function performSearch() {
     const searchTerm = searchInput.value.trim();
     if (!searchTerm) return;
 
-    resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Searching the library...</p>';
+    resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Searching sacred texts...</p>';
 
-    // The Magic Fix: Added "&videoEmbeddable=true" so we never get blocked videos!
-    const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&videoEmbeddable=true&q=${encodeURIComponent(searchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
+    // --- THE INVISIBLE FENCE: Strict Content Restrictor ---
+    // We secretly add Nepali mythology keywords to whatever the user typed
+    const strictSearchTerm = searchTerm + ' Nepali katha OR puran OR dharmik OR mahabharat OR swasthani';
+    
+    // We also added &relevanceLanguage=ne to strictly prefer Nepali language results
+    const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&videoEmbeddable=true&relevanceLanguage=ne&q=${encodeURIComponent(strictSearchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
 
     fetch(apiUrl)
         .then(response => response.json())
@@ -28,7 +32,7 @@ function performSearch() {
             resultsContainer.innerHTML = ''; 
 
             if (data.error || !data.items || data.items.length === 0) {
-                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">No valid stories found. Try another search.</p>';
+                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">No matching Nepali mythological stories found. Try another search.</p>';
                 return;
             }
 
@@ -63,7 +67,11 @@ function performSearch() {
                     height: '0', 
                     width: '0',
                     videoId: videoId,
-                    playerVars: { 'autoplay': 0, 'controls': 0 }
+                    playerVars: { 
+                        'autoplay': 0, 
+                        'controls': 0, 
+                        'disablekb': 1 // Prevents keyboard skipping
+                    }
                 });
 
                 // Update the timer every second
@@ -75,44 +83,65 @@ function performSearch() {
 
 // --- Custom Player Controls ---
 
-// Play / Pause Function
+// Play / Pause Function with "Solo Play" Rule
 window.togglePlay = function(videoId) {
     const player = audioPlayers[videoId];
     const btn = document.getElementById(`play-btn-${videoId}`);
     
-    // Check if the player is currently playing (State 1)
-    if (player.getPlayerState() === 1) {
-        player.pauseVideo();
-        btn.innerText = "▶ Play";
-        btn.style.backgroundColor = "#3b82f6"; // Blue
-    } else {
-        player.playVideo();
-        btn.innerText = "⏸ Pause";
-        btn.style.backgroundColor = "#10b981"; // Green when playing
+    // --- THE SOLO PLAY RULE ---
+    // Look at all other players on the page. If they are playing, pause them!
+    Object.keys(audioPlayers).forEach(id => {
+        if (id !== videoId) {
+            const otherPlayer = audioPlayers[id];
+            const otherBtn = document.getElementById(`play-btn-${id}`);
+            
+            // If the other player is loaded and currently playing (state 1) or buffering (state 3)
+            if (otherPlayer && typeof otherPlayer.getPlayerState === 'function') {
+                const state = otherPlayer.getPlayerState();
+                if (state === 1 || state === 3) {
+                    otherPlayer.pauseVideo();
+                    if (otherBtn) {
+                        otherBtn.innerText = "▶ Play";
+                        otherBtn.style.backgroundColor = "#3b82f6"; // Reset to Blue
+                    }
+                }
+            }
+        }
+    });
+    // --------------------------
+    
+    // Now handle the button the user actually clicked
+    if (player && typeof player.getPlayerState === 'function') {
+        if (player.getPlayerState() === 1) {
+            player.pauseVideo();
+            btn.innerText = "▶ Play";
+            btn.style.backgroundColor = "#3b82f6"; // Blue when paused
+        } else {
+            player.playVideo();
+            btn.innerText = "⏸ Pause";
+            btn.style.backgroundColor = "#10b981"; // Green when playing
+        }
     }
 };
 
 // Fast Forward (Playback Speed) Function
 window.changeSpeed = function(videoId, btnElement) {
     const player = audioPlayers[videoId];
-    let currentRate = player.getPlaybackRate();
-    
-    // Cycle through speeds: 1x -> 1.5x -> 2x -> 1x
-    let newRate = currentRate === 1 ? 1.5 : (currentRate === 1.5 ? 2 : 1);
-    
-    player.setPlaybackRate(newRate);
-    btnElement.innerText = newRate + "x Speed";
+    if (player && typeof player.getPlaybackRate === 'function') {
+        let currentRate = player.getPlaybackRate();
+        let newRate = currentRate === 1 ? 1.5 : (currentRate === 1.5 ? 2 : 1);
+        player.setPlaybackRate(newRate);
+        btnElement.innerText = newRate + "x Speed";
+    }
 };
 
 // Update the Timer Function
 window.updateTime = function(videoId) {
     const player = audioPlayers[videoId];
-    // Make sure the player is loaded before trying to get the time
     if (player && typeof player.getCurrentTime === 'function') {
         const time = Math.floor(player.getCurrentTime());
         const mins = Math.floor(time / 60);
         const secs = time % 60;
-        // Formats seconds to always have two digits (e.g., 5:09 instead of 5:9)
         document.getElementById(`time-${videoId}`).innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 };
