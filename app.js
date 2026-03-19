@@ -19,11 +19,8 @@ function performSearch() {
 
     resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Searching sacred texts...</p>';
 
-    // --- THE INVISIBLE FENCE: Strict Content Restrictor ---
-    // We secretly add Nepali mythology keywords to whatever the user typed
+    // The Invisible Fence: Strict Content Restrictor
     const strictSearchTerm = searchTerm + ' Nepali katha OR puran OR dharmik OR mahabharat OR swasthani';
-    
-    // We also added &relevanceLanguage=ne to strictly prefer Nepali language results
     const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&videoEmbeddable=true&relevanceLanguage=ne&q=${encodeURIComponent(strictSearchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
 
     fetch(apiUrl)
@@ -52,7 +49,9 @@ function performSearch() {
                     <div class="custom-audio-player">
                         <button onclick="togglePlay('${videoId}')" id="play-btn-${videoId}" class="audio-btn">▶ Play</button>
                         <button onclick="changeSpeed('${videoId}', this)" class="audio-btn speed-btn">1x Speed</button>
-                        <span id="time-${videoId}" class="time-display">0:00</span>
+                        <span id="time-${videoId}" class="time-display">0:00 / 0:00</span>
+                        
+                        <input type="range" id="seek-${videoId}" class="seek-bar" value="0" min="0" max="100" step="0.1" oninput="seekAudio('${videoId}', this.value)">
                     </div>
 
                     <div id="yt-${videoId}" class="hidden-yt"></div>
@@ -60,7 +59,7 @@ function performSearch() {
                 resultsContainer.appendChild(div);
             });
 
-            // After writing the HTML, attach the YouTube API to our hidden divs
+            // Attach the YouTube API to our hidden divs
             data.items.forEach(item => {
                 const videoId = item.id.videoId;
                 audioPlayers[videoId] = new YT.Player(`yt-${videoId}`, {
@@ -69,12 +68,11 @@ function performSearch() {
                     videoId: videoId,
                     playerVars: { 
                         'autoplay': 0, 
-                        'controls': 0, 
-                        'disablekb': 1 // Prevents keyboard skipping
+                        'controls': 0 
                     }
                 });
 
-                // Update the timer every second
+                // Update the timer and slider every second
                 setInterval(() => updateTime(videoId), 1000);
             });
         })
@@ -83,48 +81,44 @@ function performSearch() {
 
 // --- Custom Player Controls ---
 
-// Play / Pause Function with "Solo Play" Rule
+// Play / Pause Function with Solo Play Rule
 window.togglePlay = function(videoId) {
     const player = audioPlayers[videoId];
     const btn = document.getElementById(`play-btn-${videoId}`);
     
-    // --- THE SOLO PLAY RULE ---
-    // Look at all other players on the page. If they are playing, pause them!
+    // Pause all other players
     Object.keys(audioPlayers).forEach(id => {
         if (id !== videoId) {
             const otherPlayer = audioPlayers[id];
             const otherBtn = document.getElementById(`play-btn-${id}`);
-            
-            // If the other player is loaded and currently playing (state 1) or buffering (state 3)
             if (otherPlayer && typeof otherPlayer.getPlayerState === 'function') {
                 const state = otherPlayer.getPlayerState();
                 if (state === 1 || state === 3) {
                     otherPlayer.pauseVideo();
                     if (otherBtn) {
                         otherBtn.innerText = "▶ Play";
-                        otherBtn.style.backgroundColor = "#3b82f6"; // Reset to Blue
+                        otherBtn.style.backgroundColor = "#3b82f6"; 
                     }
                 }
             }
         }
     });
-    // --------------------------
     
-    // Now handle the button the user actually clicked
+    // Play or Pause the clicked track
     if (player && typeof player.getPlayerState === 'function') {
         if (player.getPlayerState() === 1) {
             player.pauseVideo();
             btn.innerText = "▶ Play";
-            btn.style.backgroundColor = "#3b82f6"; // Blue when paused
+            btn.style.backgroundColor = "#3b82f6";
         } else {
             player.playVideo();
             btn.innerText = "⏸ Pause";
-            btn.style.backgroundColor = "#10b981"; // Green when playing
+            btn.style.backgroundColor = "#10b981";
         }
     }
 };
 
-// Fast Forward (Playback Speed) Function
+// Fast Forward (Playback Speed)
 window.changeSpeed = function(videoId, btnElement) {
     const player = audioPlayers[videoId];
     if (player && typeof player.getPlaybackRate === 'function') {
@@ -135,14 +129,41 @@ window.changeSpeed = function(videoId, btnElement) {
     }
 };
 
-// Update the Timer Function
+// NEW: Seek Function (When user drags the slider)
+window.seekAudio = function(videoId, percentage) {
+    const player = audioPlayers[videoId];
+    if (player && typeof player.getDuration === 'function') {
+        const duration = player.getDuration();
+        const seekToTime = (percentage / 100) * duration;
+        player.seekTo(seekToTime, true);
+    }
+};
+
+// UPGRADED: Update Timer and Slider Position
 window.updateTime = function(videoId) {
     const player = audioPlayers[videoId];
-    if (player && typeof player.getCurrentTime === 'function') {
-        const time = Math.floor(player.getCurrentTime());
-        const mins = Math.floor(time / 60);
-        const secs = time % 60;
-        document.getElementById(`time-${videoId}`).innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+    
+    if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
+        const currentTime = player.getCurrentTime();
+        const duration = player.getDuration();
+        
+        if (duration > 0) {
+            // Helper function to format seconds into M:SS
+            const formatTime = (time) => {
+                const mins = Math.floor(time / 60);
+                const secs = Math.floor(time % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            // Update the text timer (e.g., "1:30 / 45:00")
+            document.getElementById(`time-${videoId}`).innerText = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+            
+            // Move the slider handle (but only if the user isn't currently dragging it)
+            const seekBar = document.getElementById(`seek-${videoId}`);
+            if (document.activeElement !== seekBar) {
+                seekBar.value = (currentTime / duration) * 100;
+            }
+        }
     }
 };
 
