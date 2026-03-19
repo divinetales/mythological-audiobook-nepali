@@ -3,8 +3,8 @@ const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const resultsContainer = document.getElementById('results-container');
 
-// IMPORTANT: You will need to replace this with your own free YouTube API Key
-const YOUTUBE_API_KEY = AIzaSyA1i3GaH-HhO5Bqd50e2-Mfp4KCpubH4GA; 
+// IMPORTANT: We will get this key in Step 2!
+const YOUTUBE_API_KEY = 'AIzaSyA1i3GaH-HhO5Bqd50e2-Mfp4KCpubH4GA'; 
 
 function performSearch() {
     const searchTerm = searchInput.value.trim();
@@ -18,7 +18,6 @@ function performSearch() {
     resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Searching the YouTube library...</p>';
 
     // The official YouTube Data API URL
-    // We are asking for 10 video results matching the search term
     const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&q=${encodeURIComponent(searchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
 
     fetch(apiUrl)
@@ -26,10 +25,10 @@ function performSearch() {
         .then(data => {
             resultsContainer.innerHTML = ''; // Clear loading text
 
-            // Check if YouTube returned an error (usually a missing/invalid API key)
+            // Check if YouTube returned an error (usually an invalid API key)
             if (data.error) {
                 console.error('YouTube API Error:', data.error.message);
-                resultsContainer.innerHTML = `<p style="text-align:center; color: #ef4444;">API Error: ${data.error.message}</p>`;
+                resultsContainer.innerHTML = `<p style="text-align:center; color: #ef4444;">API Error: ${data.error.message}. Did you add your API key?</p>`;
                 return;
             }
 
@@ -46,9 +45,9 @@ function performSearch() {
                 const description = item.snippet.description.substring(0, 150) + '...';
                 
                 const div = document.createElement('div');
-                div.className = 'episode-card'; // Reusing your dark-mode CSS class
+                div.className = 'episode-card'; 
                 
-                // Embed the official YouTube player instead of the MP3 player
+                // Embed the official YouTube player 
                 div.innerHTML = `
                     <h3>${title}</h3>
                     <p>${description}</p>
@@ -66,7 +65,7 @@ function performSearch() {
             });
         })
         .catch(error => {
-            resultsContainer.innerHTML = '<p style="text-align:center; color: #ef4444;">Failed to connect to YouTube. Please try again.</p>';
+            resultsContainer.innerHTML = '<p style="text-align:center; color: #ef4444;">Failed to connect to YouTube. Please check your network.</p>';
             console.error('Fetch Error:', error);
         });
 }
