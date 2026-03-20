@@ -11,52 +11,76 @@ const searchBtn = document.getElementById('searchBtn');
 const resultsContainer = document.getElementById('results-container');
 const audioPlayers = {}; 
 
+// --- HELPER: Convert YouTube Time (PT1H5M30S) to Total Seconds ---
+function parseDuration(duration) {
+    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+    const hours = (parseInt(match[1]) || 0);
+    const minutes = (parseInt(match[2]) || 0);
+    const seconds = (parseInt(match[3]) || 0);
+    return (hours * 3600) + (minutes * 60) + seconds;
+}
+
 function performSearch() {
     const rawSearchTerm = searchInput.value.trim().toLowerCase();
     if (!rawSearchTerm) return;
 
-    resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Analyzing your request and searching sacred texts...</p>';
+    resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Analyzing duration and finding the best long-format stories...</p>';
 
-    // --- SMART QUERY ANALYZER ---
-    
-    // 1. Detect if the user explicitly wants music
+    // --- SMART QUERY (CLEANED UP) ---
     const wantsMusic = /bhajan|song|geet|aarti|dhun/i.test(rawSearchTerm);
-    
-    // 2. Detect if the user is looking for a specific chapter/episode
-    // This looks for words like "chapter", "adhyaya", "part", or any numbers
     const wantsSpecificChapter = /chapter|adhyaya|part|episode|\d+/i.test(rawSearchTerm);
 
-    // Build the base strict term
-    let strictSearchTerm = rawSearchTerm + ' Nepali (katha OR puran OR pravachan OR dharmik)';
+    // Keep the search clean so YouTube gives us the best matches
+    let cleanSearchTerm = rawSearchTerm + ' Nepali (katha OR puran OR pravachan OR dharmik)';
+    if (!wantsMusic) { cleanSearchTerm += ' -bhajan -song'; } // Only excluding music now
 
-    // 3. Exclude music and short clips (status/tiktok) UNLESS they asked for music
-    if (!wantsMusic) {
-        strictSearchTerm += ' -bhajan -song -geet -aarti -status -short -tiktok -reels -promo';
-    }
-
-    // 4. Determine Sorting Order
-    // If they want a specific chapter, use 'relevance' to find that exact number.
-    // If they want a general story, use 'viewCount' to get the most popular creators.
     const sortOrder = wantsSpecificChapter ? 'relevance' : 'viewCount';
 
-    // Build the final API URL
-    const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&videoEmbeddable=true&relevanceLanguage=ne&order=${sortOrder}&q=${encodeURIComponent(strictSearchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
+    // STEP 1: Fetch 50 results (Max allowed)
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&videoEmbeddable=true&relevanceLanguage=ne&order=${sortOrder}&q=${encodeURIComponent(cleanSearchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
 
-    fetch(apiUrl)
+    fetch(searchUrl)
         .then(response => response.json())
-        .then(data => {
+        .then(searchData => {
+            if (searchData.error || !searchData.items || searchData.items.length === 0) {
+                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">No results found. Try adjusting your search.</p>';
+                return;
+            }
+
+            // Extract the 50 Video IDs
+            const videoIds = searchData.items.map(item => item.id.videoId).join(',');
+
+            // STEP 2: Ask YouTube for the exact lengths of these 50 videos
+            const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds}&key=${YOUTUBE_API_KEY}`;
+
+            return fetch(detailsUrl);
+        })
+        .then(response => response ? response.json() : null)
+        .then(detailsData => {
+            if (!detailsData || !detailsData.items) return;
+
             resultsContainer.innerHTML = ''; 
 
-            if (data.error || !data.items || data.items.length === 0) {
-                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">No exact matches found. Try checking the Search Guide for tips!</p>';
+            // STEP 3: The Strict 5-Minute Filter
+            // Only keep videos where the duration is >= 300 seconds (5 minutes)
+            const longVideos = detailsData.items.filter(video => {
+                const durationInSeconds = parseDuration(video.contentDetails.duration);
+                return durationInSeconds >= 300; 
+            });
+
+            // Take the top 10 from the remaining long videos
+            const finalVideos = longVideos.slice(0, 10);
+
+            if (finalVideos.length === 0) {
+                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Found matches, but none were longer than 5 minutes. Try another search.</p>';
                 return;
             }
 
             // Build the Custom HTML
-            data.items.forEach(item => {
-                const videoId = item.id.videoId;
+            finalVideos.forEach(item => {
+                const videoId = item.id; // Note: In the /videos endpoint, the ID is direct
                 const title = item.snippet.title;
-                const channelTitle = item.snippet.channelTitle; // Grabbing the creator's name!
+                const channelTitle = item.snippet.channelTitle; 
                 const description = item.snippet.description.substring(0, 130) + '...';
                 
                 const div = document.createElement('div');
@@ -80,8 +104,8 @@ function performSearch() {
             });
 
             // Attach YouTube Engine
-            data.items.forEach(item => {
-                const videoId = item.id.videoId;
+            finalVideos.forEach(item => {
+                const videoId = item.id;
                 audioPlayers[videoId] = new YT.Player(`yt-${videoId}`, {
                     height: '0', 
                     width: '0',
