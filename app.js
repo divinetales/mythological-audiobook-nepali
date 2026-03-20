@@ -9,19 +9,38 @@ const YOUTUBE_API_KEY = 'AIzaSyA1i3GaH-HhO5Bqd50e2-Mfp4KCpubH4GA'; // <-- PASTE 
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const resultsContainer = document.getElementById('results-container');
-
-// We will store our hidden audio engines here
 const audioPlayers = {}; 
 
 function performSearch() {
-    const searchTerm = searchInput.value.trim();
-    if (!searchTerm) return;
+    const rawSearchTerm = searchInput.value.trim().toLowerCase();
+    if (!rawSearchTerm) return;
 
-    resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Searching sacred texts...</p>';
+    resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">Analyzing your request and searching sacred texts...</p>';
 
-    // The Invisible Fence: Strict Content Restrictor
-    const strictSearchTerm = searchTerm + ' Nepali katha OR puran OR dharmik OR mahabharat OR swasthani';
-    const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&videoEmbeddable=true&relevanceLanguage=ne&q=${encodeURIComponent(strictSearchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
+    // --- SMART QUERY ANALYZER ---
+    
+    // 1. Detect if the user explicitly wants music
+    const wantsMusic = /bhajan|song|geet|aarti|dhun/i.test(rawSearchTerm);
+    
+    // 2. Detect if the user is looking for a specific chapter/episode
+    // This looks for words like "chapter", "adhyaya", "part", or any numbers
+    const wantsSpecificChapter = /chapter|adhyaya|part|episode|\d+/i.test(rawSearchTerm);
+
+    // Build the base strict term
+    let strictSearchTerm = rawSearchTerm + ' Nepali (katha OR puran OR pravachan OR dharmik)';
+
+    // 3. Exclude music and short clips (status/tiktok) UNLESS they asked for music
+    if (!wantsMusic) {
+        strictSearchTerm += ' -bhajan -song -geet -aarti -status -short -tiktok -reels -promo';
+    }
+
+    // 4. Determine Sorting Order
+    // If they want a specific chapter, use 'relevance' to find that exact number.
+    // If they want a general story, use 'viewCount' to get the most popular creators.
+    const sortOrder = wantsSpecificChapter ? 'relevance' : 'viewCount';
+
+    // Build the final API URL
+    const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&videoEmbeddable=true&relevanceLanguage=ne&order=${sortOrder}&q=${encodeURIComponent(strictSearchTerm)}&type=video&key=${YOUTUBE_API_KEY}`;
 
     fetch(apiUrl)
         .then(response => response.json())
@@ -29,14 +48,15 @@ function performSearch() {
             resultsContainer.innerHTML = ''; 
 
             if (data.error || !data.items || data.items.length === 0) {
-                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">No matching Nepali mythological stories found. Try another search.</p>';
+                resultsContainer.innerHTML = '<p style="text-align:center; color: #94a3b8;">No exact matches found. Try checking the Search Guide for tips!</p>';
                 return;
             }
 
-            // Build the Custom HTML for each result
+            // Build the Custom HTML
             data.items.forEach(item => {
                 const videoId = item.id.videoId;
                 const title = item.snippet.title;
+                const channelTitle = item.snippet.channelTitle; // Grabbing the creator's name!
                 const description = item.snippet.description.substring(0, 130) + '...';
                 
                 const div = document.createElement('div');
@@ -44,13 +64,13 @@ function performSearch() {
                 
                 div.innerHTML = `
                     <h3>${title}</h3>
+                    <p style="color: #3b82f6; font-size: 0.85rem; margin-top: -10px; margin-bottom: 10px;">👤 By: ${channelTitle}</p>
                     <p>${description}</p>
                     
                     <div class="custom-audio-player">
                         <button onclick="togglePlay('${videoId}')" id="play-btn-${videoId}" class="audio-btn">▶ Play</button>
                         <button onclick="changeSpeed('${videoId}', this)" class="audio-btn speed-btn">1x Speed</button>
                         <span id="time-${videoId}" class="time-display">0:00 / 0:00</span>
-                        
                         <input type="range" id="seek-${videoId}" class="seek-bar" value="0" min="0" max="100" step="0.1" oninput="seekAudio('${videoId}', this.value)">
                     </div>
 
@@ -59,34 +79,27 @@ function performSearch() {
                 resultsContainer.appendChild(div);
             });
 
-            // Attach the YouTube API to our hidden divs
+            // Attach YouTube Engine
             data.items.forEach(item => {
                 const videoId = item.id.videoId;
                 audioPlayers[videoId] = new YT.Player(`yt-${videoId}`, {
                     height: '0', 
                     width: '0',
                     videoId: videoId,
-                    playerVars: { 
-                        'autoplay': 0, 
-                        'controls': 0 
-                    }
+                    playerVars: { 'autoplay': 0, 'controls': 0 }
                 });
-
-                // Update the timer and slider every second
                 setInterval(() => updateTime(videoId), 1000);
             });
         })
         .catch(error => console.error('Fetch Error:', error));
 }
 
-// --- Custom Player Controls ---
-
-// Play / Pause Function with Solo Play Rule
+// --- Player Controls (Play, Speed, Seek, Time) ---
 window.togglePlay = function(videoId) {
     const player = audioPlayers[videoId];
     const btn = document.getElementById(`play-btn-${videoId}`);
     
-    // Pause all other players
+    // Solo Play: Pause others
     Object.keys(audioPlayers).forEach(id => {
         if (id !== videoId) {
             const otherPlayer = audioPlayers[id];
@@ -104,7 +117,7 @@ window.togglePlay = function(videoId) {
         }
     });
     
-    // Play or Pause the clicked track
+    // Play/Pause current
     if (player && typeof player.getPlayerState === 'function') {
         if (player.getPlayerState() === 1) {
             player.pauseVideo();
@@ -118,7 +131,6 @@ window.togglePlay = function(videoId) {
     }
 };
 
-// Fast Forward (Playback Speed)
 window.changeSpeed = function(videoId, btnElement) {
     const player = audioPlayers[videoId];
     if (player && typeof player.getPlaybackRate === 'function') {
@@ -129,7 +141,6 @@ window.changeSpeed = function(videoId, btnElement) {
     }
 };
 
-// NEW: Seek Function (When user drags the slider)
 window.seekAudio = function(videoId, percentage) {
     const player = audioPlayers[videoId];
     if (player && typeof player.getDuration === 'function') {
@@ -139,26 +150,18 @@ window.seekAudio = function(videoId, percentage) {
     }
 };
 
-// UPGRADED: Update Timer and Slider Position
 window.updateTime = function(videoId) {
     const player = audioPlayers[videoId];
-    
     if (player && typeof player.getCurrentTime === 'function' && typeof player.getDuration === 'function') {
         const currentTime = player.getCurrentTime();
         const duration = player.getDuration();
-        
         if (duration > 0) {
-            // Helper function to format seconds into M:SS
             const formatTime = (time) => {
                 const mins = Math.floor(time / 60);
                 const secs = Math.floor(time % 60);
                 return `${mins}:${secs.toString().padStart(2, '0')}`;
             };
-
-            // Update the text timer (e.g., "1:30 / 45:00")
             document.getElementById(`time-${videoId}`).innerText = `${formatTime(currentTime)} / ${formatTime(duration)}`;
-            
-            // Move the slider handle (but only if the user isn't currently dragging it)
             const seekBar = document.getElementById(`seek-${videoId}`);
             if (document.activeElement !== seekBar) {
                 seekBar.value = (currentTime / duration) * 100;
@@ -167,6 +170,5 @@ window.updateTime = function(videoId) {
     }
 };
 
-// Event Listeners for the Search Bar
 searchBtn.addEventListener('click', performSearch);
 searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') performSearch(); });
